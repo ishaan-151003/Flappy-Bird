@@ -33,7 +33,7 @@ class Bird:
     def __init__(self, x, y):
         self.x = x
         self.y = y
-        self.tilt = 0 
+        self.tilt = 0
         self.tick_count = 0
         self.vel = 0
         self.height = self.y
@@ -47,7 +47,7 @@ class Bird:
 
     def move(self):
         self.tick_count += 1
-        displacement = self.vel * self.tick_count + 0.5 * 3 * self.tick_count ** 2  
+        displacement = self.vel * self.tick_count + 0.5 * 3 * self.tick_count ** 2
         if displacement >= 16:
             displacement = (displacement / abs(displacement)) * 16
         if displacement < 0:
@@ -80,7 +80,6 @@ class Bird:
 
     def get_mask(self):
         return pygame.mask.from_surface(self.img)
-
 
 class Pipe:
     GAP = 200
@@ -120,7 +119,6 @@ class Pipe:
             return True
         return False
 
-
 class Base:
     VEL = 5
     WIDTH = base_img.get_width()
@@ -144,12 +142,10 @@ class Base:
         win.blit(self.IMG, (self.x1, self.y))
         win.blit(self.IMG, (self.x2, self.y))
 
-
 def blit_rotate_center(surf, image, topleft, angle):
     rotated_image = pygame.transform.rotate(image, angle)
     new_rect = rotated_image.get_rect(center=image.get_rect(topleft=topleft).center)
     surf.blit(rotated_image, new_rect.topleft)
-
 
 def draw_window(win, birds, pipes, base, score, gen, pipe_ind):
     if gen == 0:
@@ -177,14 +173,122 @@ def draw_window(win, birds, pipes, base, score, gen, pipe_ind):
     win.blit(alive_label, (10, 50))
     pygame.display.update()
 
+def draw_menu(win):
+    win.blit(bg_img, (0, 0))
+    title_label = END_FONT.render("Flappy Bird", 1, (255, 255, 255))
+    play_label = STAT_FONT.render("Press 1 to Play", 1, (255, 255, 255))
+    ai_label = STAT_FONT.render("Press 2 for AI", 1, (255, 255, 255))
+
+    win.blit(title_label, (WIN_WIDTH // 2 - title_label.get_width() // 2, 200))
+    win.blit(play_label, (WIN_WIDTH // 2 - play_label.get_width() // 2, 400))
+    win.blit(ai_label, (WIN_WIDTH // 2 - ai_label.get_width() // 2, 500))
+
+    pygame.display.update()
+
+def draw_pause_menu(win):
+    pause_label = END_FONT.render("Paused", 1, (255, 255, 255))
+    resume_label = STAT_FONT.render("Press R to Resume", 1, (255, 255, 255))
+    menu_label = STAT_FONT.render("Press M for Main Menu", 1, (255, 255, 255))
+
+    win.blit(pause_label, (WIN_WIDTH // 2 - pause_label.get_width() // 2, 300))
+    win.blit(resume_label, (WIN_WIDTH // 2 - resume_label.get_width() // 2, 400))
+    win.blit(menu_label, (WIN_WIDTH // 2 - menu_label.get_width() // 2, 500))
+
+    pygame.display.update()
+
+def main_menu():
+    run = True
+    while run:
+        draw_menu(WIN)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                run = False
+                pygame.quit()
+                quit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_1:
+                    run_game()
+                elif event.key == pygame.K_2:
+                    config_path = os.path.join(os.path.dirname(__file__), 'config-feedforward.txt')
+                    run_ai(config_path)
+    pygame.quit()
+    quit()
+
+def run_game():
+    bird = Bird(230, 350)
+    base = Base(FLOOR)
+    pipes = [Pipe(700)]
+    score = 0
+
+    clock = pygame.time.Clock()
+    run = True
+    paused = False
+
+    while run:
+        if not paused:
+            clock.tick(30)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    run = False
+                    pygame.quit()
+                    quit()
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_SPACE:
+                        bird.jump()
+                    if event.key == pygame.K_ESCAPE:
+                        paused = True
+
+            bird.move()
+            add_pipe = False
+            rem = []
+            for pipe in pipes:
+                pipe.move()
+                if pipe.collide(bird):
+                    run = False
+
+                if pipe.x + pipe.PIPE_TOP.get_width() < 0:
+                    rem.append(pipe)
+
+                if not pipe.passed and pipe.x < bird.x:
+                    pipe.passed = True
+                    add_pipe = True
+
+            if add_pipe:
+                score += 1
+                pipes.append(Pipe(WIN_WIDTH))
+
+            for r in rem:
+                pipes.remove(r)
+
+            if bird.y + bird.img.get_height() - 10 >= FLOOR or bird.y < -50:
+                run = False
+
+            base.move()
+            draw_window(WIN, [bird], pipes, base, score, gen, 0)
+        else:
+            draw_pause_menu(WIN)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    run = False
+                    pygame.quit()
+                    quit()
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_r:
+                        paused = False
+                    if event.key == pygame.K_m:
+                        main_menu()
+
+    main_menu()
 
 def eval_genomes(genomes, config):
     global WIN, gen
     win = WIN
     gen += 1
-    nets = []
+
     birds = []
+    nets = []
     ge = []
+
     for genome_id, genome in genomes:
         genome.fitness = 0
         net = neat.nn.FeedForwardNetwork.create(genome, config)
@@ -195,79 +299,99 @@ def eval_genomes(genomes, config):
     base = Base(FLOOR)
     pipes = [Pipe(700)]
     score = 0
-
     clock = pygame.time.Clock()
-
     run = True
+    paused = False
+
     while run and len(birds) > 0:
-        clock.tick(30)
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                run = False
-                pygame.quit()
-                quit()
+        if not paused:
+            clock.tick(30)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    run = False
+                    pygame.quit()
+                    quit()
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        paused = True
 
-        pipe_ind = 0
-        if len(pipes) > 1 and birds[0].x > pipes[0].x + pipes[0].PIPE_TOP.get_width():
-            pipe_ind = 1
+            pipe_ind = 0
+            if len(birds) > 0:
+                if len(pipes) > 1 and birds[0].x > pipes[0].x + pipes[0].PIPE_TOP.get_width():
+                    pipe_ind = 1
 
-        for x, bird in enumerate(birds):
-            ge[x].fitness += 0.1
-            bird.move()
-            output = nets[birds.index(bird)].activate(
-                (bird.y, abs(bird.y - pipes[pipe_ind].height), abs(bird.y - pipes[pipe_ind].bottom)))
-            if output[0] > 0.5:
-                bird.jump()
+            for x, bird in enumerate(birds):
+                bird.move()
+                ge[x].fitness += 0.1
 
-        base.move()
+                output = nets[birds.index(bird)].activate((bird.y, abs(bird.y - pipes[pipe_ind].height),
+                                                           abs(bird.y - pipes[pipe_ind].bottom)))
 
-        rem = []
-        add_pipe = False
-        for pipe in pipes:
-            pipe.move()
+                if output[0] > 0.5:
+                    bird.jump()
+
+            add_pipe = False
+            rem = []
+            for pipe in pipes:
+                pipe.move()
+                for bird in birds:
+                    if pipe.collide(bird):
+                        ge[birds.index(bird)].fitness -= 1
+                        nets.pop(birds.index(bird))
+                        ge.pop(birds.index(bird))
+                        birds.pop(birds.index(bird))
+                if pipe.x + pipe.PIPE_TOP.get_width() < 0:
+                    rem.append(pipe)
+                if not pipe.passed and pipe.x < birds[0].x:
+                    pipe.passed = True
+                    add_pipe = True
+
+            if add_pipe:
+                score += 1
+                for genome in ge:
+                    genome.fitness += 5
+                pipes.append(Pipe(WIN_WIDTH))
+
+            for r in rem:
+                pipes.remove(r)
+
             for bird in birds:
-                if pipe.collide(bird):
-                    ge[birds.index(bird)].fitness -= 1
+                if bird.y + bird.img.get_height() - 10 >= FLOOR or bird.y < -50:
                     nets.pop(birds.index(bird))
                     ge.pop(birds.index(bird))
                     birds.pop(birds.index(bird))
 
-            if pipe.x + pipe.PIPE_TOP.get_width() < 0:
-                rem.append(pipe)
+            base.move()
+            draw_window(WIN, birds, pipes, base, score, gen, pipe_ind)
+        else:
+            draw_pause_menu(WIN)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    run = False
+                    pygame.quit()
+                    quit()
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_r:
+                        paused = False
+                    if event.key == pygame.K_m:
+                        main_menu()
 
-            if not pipe.passed and pipe.x < bird.x:
-                pipe.passed = True
-                add_pipe = True
+def run_ai(config_path):
+    config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
+                                neat.DefaultSpeciesSet, neat.DefaultStagnation, config_path)
 
-        if add_pipe:
-            score += 1
-            for genome in ge:
-                genome.fitness += 5
-            pipes.append(Pipe(WIN_WIDTH))
-
-        for r in rem:
-            pipes.remove(r)
-
-        for bird in birds:
-            if bird.y + bird.img.get_height() - 10 >= FLOOR or bird.y < -50:
-                nets.pop(birds.index(bird))
-                ge.pop(birds.index(bird))
-                birds.pop(birds.index(bird))
-
-        draw_window(WIN, birds, pipes, base, score, gen, pipe_ind)
-
-
-def run(config_file):
-    config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction, neat.DefaultSpeciesSet, neat.DefaultStagnation, config_file)  # type: ignore
     p = neat.Population(config)
+
     p.add_reporter(neat.StdOutReporter(True))
     stats = neat.StatisticsReporter()
     p.add_reporter(stats)
-    winner = p.run(eval_genomes, 50)
-    print('\nBest genome:\n{!s}'.format(winner))
+    p.add_reporter(neat.Checkpointer(5))
 
+    winner = p.run(eval_genomes, 50)
+
+    visualize.draw_net(config, winner, True)
+    visualize.plot_stats(stats, ylog=False, view=True)
+    visualize.plot_species(stats, view=True)
 
 if __name__ == "__main__":
-    local_dir = os.path.dirname(__file__)
-    config_path = os.path.join(local_dir, 'config-feedforward.txt')
-    run(config_path)
+    main_menu()
